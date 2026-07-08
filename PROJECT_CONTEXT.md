@@ -77,3 +77,4 @@ id,dataset,row_type,node_id,t,z,y,x,source_id,target_id
 
 - `biohub_baseline.py`: modular baseline code for data inspection, Zarr/GEFF loading, visualization, detection, linking, and submission generation.
 - `Biohub_Cell_Tracking_Baseline_Colab.ipynb`: Colab notebook that imports `biohub_baseline.py`, mounts Drive, finds the dataset under the project `data/` folder, and exposes safe debug/submission cells.
+- `Biohub_EDA_and_Local_Validation.ipynb`: deeper analysis notebook for dataset integrity checks, Zarr/GEFF metadata summaries, GT density, edge-distance and division analysis, intensity sampling, visual sanity checks, and baseline-vs-GT local validation.
