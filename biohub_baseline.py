@@ -339,6 +339,19 @@ def visualize_gt_overlay(img, nodes_df: pd.DataFrame, t: int, z: int, z_toleranc
     pyplot.show()
 
 
+def choose_gt_overlay_view(img, nodes_df: pd.DataFrame) -> Tuple[int, int]:
+    """Choose a timepoint and z slice likely to contain sparse GT nodes."""
+    if nodes_df.empty:
+        return 0, int(img.shape[1] // 2)
+
+    nodes_per_t = nodes_df.groupby("t").size()
+    t = int(nodes_per_t.idxmax())
+    nodes_t = nodes_df[nodes_df["t"] == t]
+    z = int(round(nodes_t["z"].median()))
+    z = max(0, min(z, int(img.shape[1]) - 1))
+    return t, z
+
+
 # ---------------------------------------------------------------------------
 # Detection
 # ---------------------------------------------------------------------------
@@ -637,8 +650,8 @@ def run_debug_mode(base_dir: str | Path = BASE_DIR) -> None:
     geff_path = base_dir / "train" / f"{sample_id}.geff"
     if geff_path.exists():
         nodes_df, _ = load_geff_annotations(geff_path)
-        z_mid = int(img.shape[1] // 2)
-        visualize_gt_overlay(img, nodes_df, t=0, z=z_mid)
+        t_view, z_view = choose_gt_overlay_view(img, nodes_df)
+        visualize_gt_overlay(img, nodes_df, t=t_view, z=z_view)
     else:
         print(f"No GEFF found for debug sample: {geff_path}")
 
