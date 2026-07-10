@@ -375,6 +375,146 @@ Interpretation:
 - If hidden test size is close to train size, detection-only runtime is roughly `7-8 hours`, leaving some but not unlimited room under Kaggle's `12h` notebook limit.
 - Final submission notebook should avoid EDA work and only run the selected pipeline.
 
+## Local Sweep 1
+
+First GT-aligned local sweep:
+
+- samples: first `6` validation samples
+- window: `20` timepoints per sample, aligned to each sample's first GT timepoint
+- runs: `150`
+- runtime in Colab/Drive: about `26m`
+- metric used for ranking: `edge_jaccard_matched`
+
+Top matched-edge result:
+
+| det_config_id | percentile_high | threshold_abs | gaussian_sigma | min_distance | linking_radius_um | edge_jaccard_matched | node_recall_sparse_gt | pred_nodes | pred_edges |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 99.7 | 0.18 | 1.0 | 3 | 8.0 | 0.816 | 0.958 | 7577 | 6076 |
+| 0 | 99.7 | 0.18 | 1.0 | 3 | 9.0 | 0.816 | 0.958 | 7577 | 6205 |
+| 4 | 99.8 | 0.20 | 1.2 | 4 | 9.0 | 0.810 | 0.937 | 5712 | 4654 |
+| 4 | 99.8 | 0.20 | 1.2 | 4 | 8.0 | 0.807 | 0.937 | 5712 | 4558 |
+| 0 | 99.7 | 0.18 | 1.0 | 3 | 7.0 | 0.806 | 0.958 | 7577 | 5949 |
+
+Interpretation:
+
+- Lower threshold config `0` gives the best matched-edge score and very high sparse-GT node recall.
+- Config `4` is slightly lower on matched-edge score but produces substantially fewer nodes and edges, which may matter once the official node overprediction adjustment is approximated.
+- Linking radius improves from `5` to `8`, then mostly plateaus at `8-9`; next validation should focus on `8.0` and maybe `9.0`.
+- Naive edge Jaccard remains very low because sparse GT labels do not cover all real cells; it should not be used as the primary selection metric.
+
+Next sweep:
+
+- run top configs `0` and `4` over all `24` validation samples
+- compare radius `8.0` and `9.0`
+- add an approximate node-count adjustment using `estimated_number_of_nodes`
+
+## Selected Config Validation 1
+
+Selected config validation:
+
+- samples: all `24` validation samples
+- window: `20` GT-aligned timepoints per sample
+- runs: `96`
+- runtime in Colab/Drive: about `30m`
+
+Summary:
+
+| selected_config_name | percentile_high | threshold_abs | gaussian_sigma | min_distance | linking_radius_um | edge_jaccard_matched | edge_jaccard_naive | node_recall_sparse_gt | pred_nodes | pred_edges |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `det4_radius9_balanced` | 99.8 | 0.20 | 1.2 | 4 | 9.0 | 0.704 | 0.0396 | 0.876 | 5900 | 4770 |
+| `det4_radius8_balanced` | 99.8 | 0.20 | 1.2 | 4 | 8.0 | 0.702 | 0.0400 | 0.876 | 5900 | 4649 |
+| `det0_radius9_high_recall` | 99.7 | 0.18 | 1.0 | 3 | 9.0 | 0.698 | 0.0308 | 0.925 | 7471 | 6034 |
+| `det0_radius8_high_recall` | 99.7 | 0.18 | 1.0 | 3 | 8.0 | 0.694 | 0.0312 | 0.925 | 7471 | 5879 |
+
+Interpretation:
+
+- On the full validation set, the balanced config `det4` beats high-recall config `det0` on matched edge score.
+- `det4` also produces about `21%` fewer nodes and edges than `det0`, which should be safer under the official overprediction penalty.
+- Radius `9.0` slightly improves matched-edge score over `8.0`, but also adds edges; the gap is small.
+- Current best candidate before node-adjustment approximation: `det4_radius9_balanced`.
+- Conservative candidate if edge count penalty looks costly: `det4_radius8_balanced`.
+
+Next action: add an approximate node overprediction adjustment and rerank these configs before deciding the first submission config.
+
+Approximate adjusted summary after applying the estimated-node overprediction factor:
+
+| selected_config_name | edge_jaccard_adjusted_approx | edge_jaccard_matched | node_overprediction_factor | node_recall_sparse_gt | pred_nodes | expected_nodes_window | pred_edges |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `det4_radius9_balanced` | 0.676 | 0.704 | 0.958 | 0.876 | 5900 | 6675 | 4770 |
+| `det4_radius8_balanced` | 0.674 | 0.702 | 0.958 | 0.876 | 5900 | 6675 | 4649 |
+| `det0_radius9_high_recall` | 0.576 | 0.698 | 0.832 | 0.925 | 7471 | 6675 | 6034 |
+| `det0_radius8_high_recall` | 0.572 | 0.694 | 0.832 | 0.925 | 7471 | 6675 | 5879 |
+
+Interpretation:
+
+- Approximate adjustment makes the balanced config decisively better than the high-recall config.
+- `det4_radius9_balanced` remains the best local candidate.
+- `det4_radius8_balanced` is very close and slightly more conservative on edge count.
+
+Current best classical baseline config:
+
+```python
+DETECTION_PARAMS = {
+    "percentile_low": 1,
+    "percentile_high": 99.8,
+    "gaussian_sigma": 1.2,
+    "min_distance": 4,
+    "threshold_abs": 0.20,
+    "max_detections_per_frame": None,
+}
+
+LINKING_PARAMS = {
+    "z_scale": 1.625,
+    "y_scale": 0.40625,
+    "x_scale": 0.40625,
+    "max_distance_um": 9.0,
+}
+```
+
+## Full Sequence Mini Validation
+
+Full `100T` mini validation with current best config `det4_radius9_balanced`:
+
+- samples: `6`
+- runtime: about `14m51s`
+- mean detection time per sample: `147.5s`
+- mean link time per sample: `0.70s`
+
+Per-sample results:
+
+| sample_id | edge_jaccard_adjusted_approx | edge_jaccard_matched | node_recall_sparse_gt | pred_nodes | estimated_number_of_nodes | pred_edges |
+|---|---:|---:|---:|---:|---:|---:|
+| `44b6_0c582fdc` | 0.429 | 0.429 | 0.676 | 24716 | 27958 | 20834 |
+| `44b6_d754aa59` | 0.754 | 0.829 | 1.000 | 5684 | 5171 | 4621 |
+| `6bba_afb141ff` | 0.787 | 0.787 | 0.933 | 5550 | 6054 | 4651 |
+| `6bba_09961292` | 0.733 | 0.733 | 0.906 | 27898 | 31117 | 24382 |
+| `6bba_48816121` | 0.697 | 0.697 | 0.916 | 22451 | 23965 | 18595 |
+| `6bba_cdcfe533` | 0.655 | 0.728 | 0.938 | 33070 | 29785 | 27022 |
+
+Mean full-sequence mini metrics:
+
+- `edge_jaccard_adjusted_approx`: `0.676`
+- `edge_jaccard_matched`: `0.700`
+- `node_overprediction_factor`: `0.968`
+- `node_recall_sparse_gt`: `0.895`
+- mean predicted nodes: `19895`
+- mean estimated nodes: `20675`
+- mean predicted edges: `16684`
+
+Interpretation:
+
+- The config remains strong on full sequences.
+- `44b6_0c582fdc` is the main weak case; full-sequence recall drops to `0.676`, while GT-aligned 20T looked much stronger. This sample needs error analysis by timepoint.
+- For the other five samples, full-sequence matched edge score is roughly `0.70-0.83`, which is a credible first-submission classical baseline.
+- Runtime is compatible with Kaggle's `12h` limit if the final notebook stays lean.
+
+Next actions:
+
+- inspect `44b6_0c582fdc` over time to understand late/early failure
+- create a clean submission notebook using the current best config
+- submit a first classical baseline before adding division logic
+- then add division candidates and test whether the `0.1 * division_jaccard` term improves public LB
+
 ## Current Strategy
 
 1. Use the cleaned `199`-pair dataset as the only final reference.
