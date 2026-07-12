@@ -3,3 +3,5 @@ __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 submission.csv
+reports/*submission*.csv
+_external_repos/

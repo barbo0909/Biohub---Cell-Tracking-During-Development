@@ -149,4 +149,10 @@ The public test samples are examples/copies from train. In Kaggle rerun, a hidde
 - `Biohub_Local_Scorer_and_Sweep.ipynb`: local scoring and parameter sweep notebook. It runs baseline detection/linking on selected validation samples, matches predictions to sparse GT in physical units, reports sparse node recall and edge Jaccard-like metrics, and writes sweep tables under `reports/`.
 - `Biohub_First_Submission.ipynb`: clean first-submission notebook. It uses the selected classical config from local validation, runs the test `.zarr` samples only, writes `submission.csv`, and performs basic format checks.
 - `Biohub_Drive_Unzip_and_Verify.ipynb`: utility notebook for clean Drive unzip and dataset verification.
+- `Biohub_Targeted_Postprocess_Ablation_51.ipynb`: targeted DeepCenter postprocess ablation notebook. It reuses the saved full199 checkpoint GEFF predictions, runs multiple postprocess variants on the 51-sample target set made from all 39 bad/problem samples plus 12 high-score guard samples, scores each variant locally, and writes a combined summary under `reports/`.
+  It does not rebuild a baseline/control variant by default; deltas are computed against the saved full199 DeepCenter reference scores, the Kaggle-strong method that produced the `0.889` public score.
 - `EDA_FINDINGS.md`: running notes from actual Colab outputs, including count discrepancies, orphan GEFF checks, Zarr/GEFF summaries, intensity findings, and baseline validation observations.
+- `EXPERIMENT_LOG.md`: running experiment log for classical baseline, DeepCenter validation, checkpoint recovery, targeted postprocess variants, scores, decisions, and next tuning hypotheses.
+# Project explainer
+
+For the complete Turkish biological and technical explanation of the task and current pipeline, see `PROJECT_EXPLAINER_TR.md`.
